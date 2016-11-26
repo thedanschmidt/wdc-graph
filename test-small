@@ -1,0 +1,3 @@
+#!/bin/bash
+# Runs on the full graph
+./graph_compute -nv 100 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/pld-arc  

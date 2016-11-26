@@ -1,0 +1,11 @@
+#!/bin/bash
+#SBATCH -A TG-SEE160002
+#SBATCH -J compute-graph-analytics 
+#SBATCH -o graph-analytics.stdout
+#SBATCH -N 4 -n 4 
+#SBATCH -p compute
+#SBATCH --export=ALL
+#SBATCH -t 00:30:00
+
+# Runs on the full graph
+ibrun -n 4 -o 0 ./graph_compute -nv 100000 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/pld-arc  
