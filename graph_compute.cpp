@@ -26,6 +26,9 @@ int main( int argc, char **argv )
 
     int num_vertices = read_int( argc, argv, "-nv", 1000 );
     const char* edge_file = read_string( argc, argv, "-d", NULL );
+
+    std::vector<int> col_index;
+    std::vector<int> row_ptr;
     
     //  set up MPI
     int n_proc, rank;
@@ -57,19 +60,39 @@ int main( int argc, char **argv )
     size_t len = 0;
     int out_edge = 0;
     int in_edge = 0;
+    int last_edge = NULL; // is there a clver way to do this?
+    int count = 0;
+
     while(getline(&line, &len, ef)) {
-        out_edge = atoi(strtok(line, "\t"));
-        if (out_edge >= min_vertex) {
-            in_edge = atoi(line);
-            if (out_edge > max_vertex)
-                printf("%d to %d\n", out_edge, in_edge);
+        in_edge = atoi(strtok(line, "\t")); // advances the line ptr
+        if (in_edge >= min_vertex) {
+            out_edge = atoi(line);
+            if (in_edge > max_vertex) // bounds check
                 break;
 
-            //printf("%d to %d\n", out_edge, in_edge);
-            // TODO Process edges into data structure
+            printf("%d to %d\n", in_edge, out_edge);
+
+            // Data structure construction
+            // TODO: this doesn't work yet -- need to have a value for last_edge.
+            if (in_edge == last_edge) {
+                count++;
+                col_index.push_back(out_edge);
+            } else {
+                row_ptr.push_back(row_ptr.back() + count);
+                count = 0;
+                col_index.push_back(out_edge);
+            }
+
+            // write 2 accessor functions --
+
+
         }
     }
 
+
+    // TODO: serial BFS
+    // input vertex index, return distance output indices out_vertex\tdistance
+    // openMP shared queue...
     double time = read_timer( );
 
     // TODO Process graph here
