@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iostream>
 #include <set>
+#include <stack>
 #include "graph_compute.h"
 #include "utility.h"
 
@@ -21,10 +22,15 @@ int main( int argc, char **argv )
         printf( "-h to see this help\n" );
         printf( "-nv Number of vertices to process on hyperlink graph \n" );
         printf( "-d Location of data\n" );
+        printf( "-c bfs|scc the computation to be performed");
+        printf( "-i Start index for BFS");
+        printf( "-o Output file");
         return 0;
     }
 
     int num_vertices = read_int( argc, argv, "-nv", 1000 );
+    const char* computation = read_string(argc, argv, "-c", NULL);
+    int bfs_idx = read_int( argc, argv, "-i", 1000 );
     const char* edge_file = read_string( argc, argv, "-d", NULL );
     
     //  set up MPI
@@ -47,7 +53,8 @@ int main( int argc, char **argv )
     //MPI_Type_commit( &PARTICLE );
      
 
-    // For now, iterate thorugh the whole edges file. If this is slow we can try a partitioned scheme
+    // For now, iterate thorugh the whole edges file. If this is slow we can try a 
+    // partitioned scheme
     FILE* ef = fopen(edge_file, "r");
     if (ef == NULL) {
         printf("Failed to open edge file");
@@ -72,7 +79,27 @@ int main( int argc, char **argv )
 
     double time = read_timer( );
 
-    // TODO Process graph here
+    std::vector<int> col_ind; 
+    std::vector<int> row_ptr; 
+    if ( ! computation ) {
+        printf("Computation option not specified.");
+        exit(1);
+    }
+    else if (strcmp(computation, "bfs") == 0) {
+        if (n_proc == 1) {
+            // Rohin code here :D
+        }
+        else {
+            // Parallel Breadth First Search
+            std::vector<int> distances;  
+            distances.assign(max_vertex-min_vertex, num_vertices+1);
+            distances[bfs_idx] = 0;
+            int level = 1;
+            std::stack<int> fs;
+            std::stack<int> ns;
+        }
+    }
+    
 
     time = read_timer( ) - time;
   
