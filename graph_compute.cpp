@@ -10,6 +10,28 @@
 #include "graph_compute.h"
 #include "utility.h"
 
+
+/*
+*
+* Simple Accessor Function used in BFS
+* Input: a vertex
+* Output: a vector of vertices that are connected to the input vertex
+*
+*/
+std::vector<int> findAllConnections(int in_vertex, std::vector<int> row_ptr, std::vector<int> col_index) {
+    std::vector<int> connections = {};
+    int startingIndex = row_ptr[in_vertex];
+    int endingIndex = coonections.size();
+    if (in_vertex < (connections.size() - 1)) 
+        endingIndex = row_ptr[in_vertex + 1];
+    for (int i = startingIndex; i < endingIndex; i++) {
+        connections.push_back(col_ind[i]);
+    }
+
+    return connections;
+
+}
+
 //
 //  Compute basic properties of the hyperlink graph 
 //
@@ -32,6 +54,9 @@ int main( int argc, char **argv )
     const char* computation = read_string(argc, argv, "-c", NULL);
     int bfs_idx = read_int( argc, argv, "-i", 1000 );
     const char* edge_file = read_string( argc, argv, "-d", NULL );
+
+    std::vector<int> col_index;
+    std::vector<int> row_ptr = {0};
     
     //  set up MPI
     int n_proc, rank;
@@ -64,19 +89,42 @@ int main( int argc, char **argv )
     size_t len = 0;
     int out_edge = 0;
     int in_edge = 0;
+    int last_edge = -1;
+    int count = 0;
+
     while(getline(&line, &len, ef)) {
-        out_edge = atoi(strtok(line, "\t"));
-        if (out_edge >= min_vertex) {
-            in_edge = atoi(line);
-            if (out_edge > max_vertex)
-                printf("%d to %d\n", out_edge, in_edge);
+        in_edge = atoi(strtok(line, "\t")); // advances the line ptr
+        if (in_edge >= min_vertex) {
+            if (last_edge == -1) 
+                last_edge = in_edge;
+            out_edge = atoi(line);
+            if (in_edge > max_vertex)
                 break;
 
-            //printf("%d to %d\n", out_edge, in_edge);
-            // TODO Process edges into data structure
+            printf("%d to %d\n", in_edge, out_edge);
+
+            // Data structure construction
+            col_index.push_back(out_edge);
+            if (in_edge == last_edge) {
+                count++;
+            } else {
+                row_ptr.push_back(row_ptr.back() + count);
+                count = 0;
+            }
+
+        if (count > 0) {
+            row_ptr.push_back(row_ptr.back() + count);
+            count = 0;
+        }
+
+
         }
     }
 
+
+    // TODO: serial BFS
+    // input vertex index, return distance output indices out_vertex\tdistance
+    // openMP shared queue...
     double time = read_timer( );
 
     std::vector<int> col_ind; 
