@@ -9,6 +9,28 @@
 #include "graph_compute.h"
 #include "utility.h"
 
+
+/*
+*
+* Simple Accessor Function used in BFS
+* Input: a vertex
+* Output: a vector of vertices that are connected to the input vertex
+*
+*/
+std::vector<int> findAllConnections(int in_vertex, std::vector<int> row_ptr, std::vector<int> col_index) {
+    std::vector<int> connections = {};
+    int startingIndex = row_ptr[in_vertex];
+    int endingIndex = coonections.size();
+    if (in_vertex < (connections.size() - 1)) 
+        endingIndex = row_ptr[in_vertex + 1];
+    for (int i = startingIndex; i < endingIndex; i++) {
+        connections.push_back(col_ind[i]);
+    }
+
+    return connections;
+
+}
+
 //
 //  Compute basic properties of the hyperlink graph 
 //
@@ -28,7 +50,7 @@ int main( int argc, char **argv )
     const char* edge_file = read_string( argc, argv, "-d", NULL );
 
     std::vector<int> col_index;
-    std::vector<int> row_ptr;
+    std::vector<int> row_ptr = {0};
     
     //  set up MPI
     int n_proc, rank;
@@ -60,30 +82,33 @@ int main( int argc, char **argv )
     size_t len = 0;
     int out_edge = 0;
     int in_edge = 0;
-    int last_edge = NULL; // is there a clver way to do this?
+    int last_edge = -1;
     int count = 0;
 
     while(getline(&line, &len, ef)) {
         in_edge = atoi(strtok(line, "\t")); // advances the line ptr
         if (in_edge >= min_vertex) {
+            if (last_edge == -1) 
+                last_edge = in_edge;
             out_edge = atoi(line);
-            if (in_edge > max_vertex) // bounds check
+            if (in_edge > max_vertex)
                 break;
 
             printf("%d to %d\n", in_edge, out_edge);
 
             // Data structure construction
-            // TODO: this doesn't work yet -- need to have a value for last_edge.
+            col_index.push_back(out_edge);
             if (in_edge == last_edge) {
                 count++;
-                col_index.push_back(out_edge);
             } else {
                 row_ptr.push_back(row_ptr.back() + count);
                 count = 0;
-                col_index.push_back(out_edge);
             }
 
-            // write 2 accessor functions --
+        if (count > 0) {
+            row_ptr.push_back(row_ptr.back() + count);
+            count = 0;
+        }
 
 
         }
