@@ -96,7 +96,7 @@ int main( int argc, char **argv )
 
     int in_edge = 0;
     int out_edge = 0;
-    int last_edge = -1;
+    int last_edge = min_vertex-1;
     int count = 0;
 
     while(infile >> in_edge >> out_edge) {
