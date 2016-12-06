@@ -1,0 +1,19 @@
+#!/bin/bash
+
+#SBATCH -A TG-SEE160002
+#SBATCH -J compute-graph-analytics
+#SBATCH -o graph-analytics.stdout
+#SBATCH -N 1 -n 1
+#SBATCH -p compute
+#SBATCH --export=ALL
+#SBATCH -t 00:30:00
+./graph_compute -nv 8 -c bfs -i 0 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/test_verify 
+
+#SBATCH -A TG-SEE160002
+#SBATCH -J compute-graph-analytics
+#SBATCH -o graph-analytics.stdout
+#SBATCH -N 4 -n 4
+#SBATCH -p compute
+#SBATCH --export=ALL
+#SBATCH -t 00:30:00
+./graph_compute -nv 8 -c mpi -i 0 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/test_verify
