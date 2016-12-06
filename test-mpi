@@ -8,4 +8,4 @@
 #SBATCH -t 00:30:00
 
 # Runs on the full graph
-ibrun -n 4 -o 0 ./graph_compute -nv 100000 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/pld-arc  
+ibrun -n 2 -o 0 ./graph_compute -nv 8 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/test_verify 

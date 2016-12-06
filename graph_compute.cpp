@@ -96,7 +96,7 @@ int main( int argc, char **argv )
 
     int in_edge = 0;
     int out_edge = 0;
-    int last_edge = -1;
+    int last_edge = min_vertex-1;
     int count = 0;
 
     while(infile >> in_edge >> out_edge) {
@@ -163,37 +163,127 @@ int main( int argc, char **argv )
                 }
                 level++;
             }
-            for (int i=0; i<distances.size(); i++) {
-                printf("%d\n", distances[i]);
+
+            FILE* f = fopen("serial.out", "w");
+            if (f != NULL) {
+                for (int i=0; i<distances.size(); i++) {
+                    fprintf(f, "%d\n", distances[i]);
+                }
+                fclose(f);
+            }
+            else {
+                printf("failure to write serial out");
+                exit(1);
             }
         }
         else {
             // Parallel Breadth First Search
+
+            // Buffers for Alltoallv
             int* send_buf = new int[num_vertices];
             int* recv_buf = new int[num_vertices];
+            int* send_counts = new int[n_proc];
+            int* send_displs = new int[n_proc];
+            int* recv_counts = new int[n_proc];
+            int* recv_displs = new int[n_proc];
+
+            int* all_distances = new int[num_vertices];
+
+            for (int i=0; i<n_proc; i++) {
+                send_displs[i] = i* (num_vertices/n_proc);
+                recv_displs[i] = i* (num_vertices/n_proc);
+                recv_counts[i] = (num_vertices/n_proc);
+            }
+
             do {
+                for (int i=0; i<n_proc; i++) {
+                    send_counts = 0;
+                }
                 for (int u=fs.top(); !fs.empty(); fs.pop()) {
-                    for (int c = row_ptr[u]; c < row_ptr[u+1]; c++) {
+                    for (int c = row_ptr[u-min_vertex]; c < row_ptr[u+1-min_vertex]; c++) {
                         int v = col_index[c];
                         int o = owner(v, n_proc, num_vertices);
                         if (o == rank) {
-                            if (distances[v] < 0) {
+                            if (distances[v-min_vertex] < 0) {
                                 ns.push(v);
-                                distances[v] = level;
+                                distances[v-min_vertex] = level;
                             }
                         }
                         else {
-                            // push on buffer
+                            // Put the vertex in the send buffer
+                            int offset = send_displs[o];
+                            send_buf[offset+send_counts[o]] = v;
+                            send_counts[0]++;
                         }
                     }
-                    // All-to-all sync fs
-
-                    // Search fs adding to ns
-                   
                 }
+
+                // All-to-all sync fs
+                MPI_Alltoallv(
+                    send_buf,
+                    send_counts,
+                    send_displs,
+                    MPI_INT,
+                    recv_buf,
+                    recv_counts,
+                    recv_displs,
+                    MPI_INT,
+                    MPI_COMM_WORLD
+                );
+
+                // Search vertices from all-to-all 
+                for (int p=0; p<n_proc; p++) {
+                    for (int r=0; r<recv_counts[p]; r++) {
+                        int v = recv_buf[recv_displs[p]+r];
+                        if (distances[v-min_vertex] < 0 ) {
+                            distances[v-min_vertex] = level;
+                            ns.push(v);
+                        }
+                    }
+                }
+
+                // TODO swap stacks with references for speed 
+                while (!ns.empty()) {
+                    fs.push(ns.top());
+                    ns.pop();
+                }
+                level++;
             } while (!fs.empty());
 
+            // Collect all distances on root process
+            MPI_Gather(
+                distances.data(), 
+                distances.size(),
+                MPI_INT,
+                all_distances,
+                distances.size(),
+                MPI_INT,
+                0,
+                MPI_COMM_WORLD
+            ); 
+
+
+            if (rank == 0) {
+                FILE* f = fopen("parallel.out", "w");
+                if (f != NULL) {
+                    for (int i=0; i<num_vertices; i++) {
+                        fprintf(f, "%d\n", all_distances[i]);
+                    }
+                    fclose(f);
+                }
+                else {
+                    printf("failure to write parallel out");
+                    exit(1);
+                }
+            }
+
             delete [] send_buf;
+            delete [] recv_buf;
+            delete [] send_counts;
+            delete [] send_displs;
+            delete [] recv_counts;
+            delete [] recv_displs;
+            delete [] all_distances;
         }
     }
     
