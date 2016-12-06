@@ -118,6 +118,7 @@ int main( int argc, char **argv )
             }
         }
     }
+    row_ptr.push_back(col_index.size());
     
     // Check graph construction
     /*
@@ -146,19 +147,24 @@ int main( int argc, char **argv )
         if (n_proc == 1) {
             // Serial implementation of BFS
             while (!fs.empty()) {
-                for (int u=fs.top(); !fs.empty(); fs.pop()) {
+                int u =0;
+                while ( !fs.empty() ) {
+                    u=fs.top();
+                    //printf("U: %d\n", u);
                     for (int c = row_ptr[u]; c < row_ptr[u+1]; c++) {
                         int v = col_index[c];
                         if (distances[v] < 0) {
                             ns.push(v);
                             distances[v] = level;
                         }
+                        //printf("V: %d, d(V) = %d\n", v, distances[v]);
                     }
+                    fs.pop();
                 }
 
                 // TODO swap stacks with references for speed 
+                fs = ns;
                 while (!ns.empty()) {
-                    fs.push(ns.top());
                     ns.pop();
                 }
                 level++;
