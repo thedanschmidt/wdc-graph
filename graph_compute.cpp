@@ -9,6 +9,7 @@
 #include <stack>
 #include "graph_compute.h"
 #include "utility.h"
+#include <fstream>
 
 
 /*
@@ -18,18 +19,24 @@
 * Output: a vector of vertices that are connected to the input vertex
 *
 */
-std::vector<int> findAllConnections(int in_vertex, std::vector<int> row_ptr, std::vector<int> col_index) {
-    std::vector<int> connections = {};
+std::vector<int> findAllConnections(int in_vertex, std::vector<int>& row_ptr, std::vector<int>& col_index) {
+    std::vector<int> connections;
     int startingIndex = row_ptr[in_vertex];
-    int endingIndex = coonections.size();
+    int endingIndex = connections.size();
     if (in_vertex < (connections.size() - 1)) 
         endingIndex = row_ptr[in_vertex + 1];
     for (int i = startingIndex; i < endingIndex; i++) {
-        connections.push_back(col_ind[i]);
+        connections.push_back(col_index[i]);
     }
 
     return connections;
 
+}
+
+// Gives the process that owns v
+int owner(int v, int n_proc, int num_vertices) {
+    int v_per = num_vertices / n_proc;
+    return v / v_per;
 }
 
 //
@@ -56,7 +63,7 @@ int main( int argc, char **argv )
     const char* edge_file = read_string( argc, argv, "-d", NULL );
 
     std::vector<int> col_index;
-    std::vector<int> row_ptr = {0};
+    std::vector<int> row_ptr;
     
     //  set up MPI
     int n_proc, rank;
@@ -80,71 +87,113 @@ int main( int argc, char **argv )
 
     // For now, iterate thorugh the whole edges file. If this is slow we can try a 
     // partitioned scheme
-    FILE* ef = fopen(edge_file, "r");
-    if (ef == NULL) {
+    //FILE* ef = fopen(edge_file, "r");
+    std::ifstream infile(edge_file);
+    if (infile == NULL) {
         printf("Failed to open edge file");
         exit(1);
     }
-    char* line;
-    size_t len = 0;
-    int out_edge = 0;
+
     int in_edge = 0;
+    int out_edge = 0;
     int last_edge = -1;
     int count = 0;
 
-    while(getline(&line, &len, ef)) {
-        in_edge = atoi(strtok(line, "\t")); // advances the line ptr
+    while(infile >> in_edge >> out_edge) {
+        //in_edge = atoi(strtok(line, "\t")); // advances the line ptr
         if (in_edge >= min_vertex) {
-            if (last_edge == -1) 
-                last_edge = in_edge;
-            out_edge = atoi(line);
             if (in_edge > max_vertex)
                 break;
 
-            printf("%d to %d\n", in_edge, out_edge);
-
             // Data structure construction
-            col_index.push_back(out_edge);
-            if (in_edge == last_edge) {
+            if (out_edge <= num_vertices) {
+                col_index.push_back(out_edge);
+                if (in_edge != last_edge) {
+                    while (last_edge != in_edge) {
+                        row_ptr.push_back(count);
+                        last_edge++;
+                    }
+                }         
                 count++;
-            } else {
-                row_ptr.push_back(row_ptr.back() + count);
-                count = 0;
             }
-
-        if (count > 0) {
-            row_ptr.push_back(row_ptr.back() + count);
-            count = 0;
-        }
-
-
         }
     }
+    
+    // Check graph construction
+    /*
+    for (int i=0; i<col_index.size(); i++)
+        printf("%d ", col_index[i]);
+    printf("\n");
+    for (int i=0; i<row_ptr.size(); i++)
+        printf("%d ", row_ptr[i]);
+    printf("\n");
+    */
 
-
-    // TODO: serial BFS
-    // input vertex index, return distance output indices out_vertex\tdistance
-    // openMP shared queue...
     double time = read_timer( );
 
-    std::vector<int> col_ind; 
-    std::vector<int> row_ptr; 
     if ( ! computation ) {
         printf("Computation option not specified.");
         exit(1);
     }
     else if (strcmp(computation, "bfs") == 0) {
+        std::vector<int> distances(max_vertex-min_vertex, -1);
+        int level = 1;
+        std::stack<int> fs;
+        std::stack<int> ns;
+        if (bfs_idx >= min_vertex && bfs_idx <= max_vertex)
+            distances[bfs_idx] = 0;
+            fs.push(bfs_idx);
         if (n_proc == 1) {
-            // Rohin code here :D
+            // Serial implementation of BFS
+            while (!fs.empty()) {
+                for (int u=fs.top(); !fs.empty(); fs.pop()) {
+                    for (int c = row_ptr[u]; c < row_ptr[u+1]; c++) {
+                        int v = col_index[c];
+                        if (distances[v] < 0) {
+                            ns.push(v);
+                            distances[v] = level;
+                        }
+                    }
+                }
+
+                // TODO swap stacks with references for speed 
+                while (!ns.empty()) {
+                    fs.push(ns.top());
+                    ns.pop();
+                }
+                level++;
+            }
+            for (int i=0; i<distances.size(); i++) {
+                printf("%d\n", distances[i]);
+            }
         }
         else {
             // Parallel Breadth First Search
-            std::vector<int> distances;  
-            distances.assign(max_vertex-min_vertex, num_vertices+1);
-            distances[bfs_idx] = 0;
-            int level = 1;
-            std::stack<int> fs;
-            std::stack<int> ns;
+            int* send_buf = new int[num_vertices];
+            int* recv_buf = new int[num_vertices];
+            do {
+                for (int u=fs.top(); !fs.empty(); fs.pop()) {
+                    for (int c = row_ptr[u]; c < row_ptr[u+1]; c++) {
+                        int v = col_index[c];
+                        int o = owner(v, n_proc, num_vertices);
+                        if (o == rank) {
+                            if (distances[v] < 0) {
+                                ns.push(v);
+                                distances[v] = level;
+                            }
+                        }
+                        else {
+                            // push on buffer
+                        }
+                    }
+                    // All-to-all sync fs
+
+                    // Search fs adding to ns
+                   
+                }
+            } while (!fs.empty());
+
+            delete [] send_buf;
         }
     }
     
