@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH -A TG-SEE160002
-#SBATCH -J compute-graph-analytics 
+#SBATCH -J test_mpi 
 #SBATCH -o graph-analytics.stdout
-#SBATCH -N 4 -n 4 
+#SBATCH -N 1 -n 2
 #SBATCH -p compute
 #SBATCH --export=ALL
 #SBATCH -t 00:30:00
 
 # Runs on the full graph
-ibrun -n 2 -o 0 ./graph_compute -nv 8 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/test_verify 
+ibrun -v -n 2 ./graph_compute -nv 8 -c bfs -d /oasis/projects/nsf/hmc104/schmidtd/web_data/test_verify 
