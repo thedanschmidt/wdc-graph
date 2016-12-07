@@ -118,6 +118,7 @@ int main( int argc, char **argv )
             }
         }
     }
+    row_ptr.push_back(col_index.size());
     
     // Check graph construction
     /*
@@ -146,19 +147,24 @@ int main( int argc, char **argv )
         if (n_proc == 1) {
             // Serial implementation of BFS
             while (!fs.empty()) {
-                for (int u=fs.top(); !fs.empty(); fs.pop()) {
+                int u =0;
+                while ( !fs.empty() ) {
+                    u=fs.top();
+                    //printf("U: %d\n", u);
                     for (int c = row_ptr[u]; c < row_ptr[u+1]; c++) {
                         int v = col_index[c];
                         if (distances[v] < 0) {
                             ns.push(v);
                             distances[v] = level;
                         }
+                        //printf("V: %d, d(V) = %d\n", v, distances[v]);
                     }
+                    fs.pop();
                 }
 
                 // TODO swap stacks with references for speed 
+                fs = ns;
                 while (!ns.empty()) {
-                    fs.push(ns.top());
                     ns.pop();
                 }
                 level++;
@@ -187,19 +193,21 @@ int main( int argc, char **argv )
             int* recv_counts = new int[n_proc];
             int* recv_displs = new int[n_proc];
 
-            int* all_distances = new int[num_vertices];
+            int* all_distances = new int[(3*num_vertices)/2];
 
             for (int i=0; i<n_proc; i++) {
-                send_displs[i] = i* (num_vertices/n_proc);
-                recv_displs[i] = i* (num_vertices/n_proc);
+                send_displs[i] = i*(num_vertices/n_proc);
+                recv_displs[i] = i*(num_vertices/n_proc);
                 recv_counts[i] = (num_vertices/n_proc);
             }
 
             do {
                 for (int i=0; i<n_proc; i++) {
-                    send_counts = 0;
+                    send_counts[i] = 0;
                 }
-                for (int u=fs.top(); !fs.empty(); fs.pop()) {
+                while (!fs.empty()) {
+                    int u=fs.top(); 
+                    fs.pop();
                     for (int c = row_ptr[u-min_vertex]; c < row_ptr[u+1-min_vertex]; c++) {
                         int v = col_index[c];
                         int o = owner(v, n_proc, num_vertices);
@@ -213,12 +221,25 @@ int main( int argc, char **argv )
                             // Put the vertex in the send buffer
                             int offset = send_displs[o];
                             send_buf[offset+send_counts[o]] = v;
-                            send_counts[0]++;
+                            send_counts[o]++;
                         }
                     }
                 }
 
                 // All-to-all sync fs
+
+                // First exchange counts 
+                MPI_Alltoall(
+                    send_counts,
+                    1,
+                    MPI_INT,
+                    recv_counts,
+                    1,
+                    MPI_INT,
+                    MPI_COMM_WORLD
+                );
+
+                // Now exchange
                 MPI_Alltoallv(
                     send_buf,
                     send_counts,
@@ -233,14 +254,18 @@ int main( int argc, char **argv )
 
                 // Search vertices from all-to-all 
                 for (int p=0; p<n_proc; p++) {
-                    for (int r=0; r<recv_counts[p]; r++) {
-                        int v = recv_buf[recv_displs[p]+r];
-                        if (distances[v-min_vertex] < 0 ) {
-                            distances[v-min_vertex] = level;
-                            ns.push(v);
+                    if (p != rank) {
+                        for (int r=0; r<recv_counts[p]; r++) {
+                            int v = recv_buf[recv_displs[p]+r];
+                            printf("%d received %d\n", rank, v);
+                            if (distances[v-min_vertex] < 0 ) {
+                                distances[v-min_vertex] = level;
+                                ns.push(v);
+                            }
                         }
                     }
                 }
+                printf("got past adding to ns %d\n", rank);
 
                 // TODO swap stacks with references for speed 
                 while (!ns.empty()) {
