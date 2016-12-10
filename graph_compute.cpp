@@ -183,11 +183,15 @@ int main( int argc, char **argv )
             int* recv_counts = new int[n_proc];
             int* recv_displs = new int[n_proc];
 
+            // A data structure for making sure buffers are unique
+            std::vector< std::set<int> > buff_sets;
+            buff_sets.resize(n_proc);
+
             int* all_distances = new int[(3*num_vertices)/2];
 
             for (int i=0; i<n_proc; i++) {
-                send_displs[i] = i*(num_vertices/n_proc);
-                recv_displs[i] = i*(num_vertices/n_proc);
+                send_displs[i] = i*(num_vertices/n_proc)+1;
+                recv_displs[i] = i*(num_vertices/n_proc)+1;
                 recv_counts[i] = 0;
             }
             int own = owner(bfs_idx, n_proc, num_vertices);
@@ -214,9 +218,12 @@ int main( int argc, char **argv )
                         }
                         else {
                             // Put the vertex in the send buffer
-                            int offset = send_displs[o]+send_counts[o];
-                            send_buf[offset] = v;
-                            send_counts[o]++;
+                            if (buff_sets[o].find(v) != buff_sets[o].end()) {
+                                int offset = send_displs[o]+send_counts[o];
+                                send_buf[offset] = v;
+                                send_counts[o]++;
+                                buff_sets[o].insert(v);
+                            }
                         }
                     }
                 }
@@ -250,7 +257,18 @@ int main( int argc, char **argv )
                 for (int p=0; p<n_proc; p++) {
                     if (p != rank) {
                         for (int r=0; r<recv_counts[p]; r++) {
-                            int u = recv_buf[recv_displs[p]+r];
+                            int offset = recv_displs[p]+r;
+
+                            // For debugging
+                            /*
+                            if (offset < 0 || offset > num_vertices) {
+                                printf("Offset OOB on process %d\n", rank);
+                                printf("from %d with counts %d\n", p, recv_counts[p]);
+                                exit(1);
+                            }
+                            */
+
+                            int u = recv_buf[offset];
                             if (distances[u-min_vertex] < 0 ) {
                                 distances[u-min_vertex] = level;
                                 ns.push(u);
