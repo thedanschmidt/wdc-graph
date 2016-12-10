@@ -59,7 +59,7 @@ int main( int argc, char **argv )
 
     int num_vertices = read_int( argc, argv, "-nv", 1000 );
     const char* computation = read_string(argc, argv, "-c", NULL);
-    int bfs_idx = read_int( argc, argv, "-i", 1000 );
+    int bfs_idx = read_int( argc, argv, "-i", 0 );
     const char* edge_file = read_string( argc, argv, "-d", NULL );
 
     std::vector<int> col_index;
@@ -73,21 +73,14 @@ int main( int argc, char **argv )
 
     // Vertices owned by this process
     int min_vertex = (num_vertices / n_proc)*rank;
-    int max_vertex = (num_vertices / n_proc)*(rank+1);
+    int max_vertex = (num_vertices / n_proc)*(rank+1)-1;
     if (max_vertex > num_vertices)
         max_vertex = num_vertices;
     
     printf("%d owns %d through %d \n", rank, min_vertex, max_vertex);
 
-    // Global info everyone needs
-    //MPI_Datatype PARTICLE;
-    //MPI_Type_contiguous( 6, MPI_DOUBLE, &PARTICLE );
-    //MPI_Type_commit( &PARTICLE );
-     
-
     // For now, iterate thorugh the whole edges file. If this is slow we can try a 
     // partitioned scheme
-    //FILE* ef = fopen(edge_file, "r");
     std::ifstream infile(edge_file);
     if (infile == NULL) {
         printf("Failed to open edge file");
@@ -130,34 +123,31 @@ int main( int argc, char **argv )
     printf("\n");
     */
 
-    double time = read_timer( );
+    double start_time = read_timer();
 
     if ( ! computation ) {
         printf("Computation option not specified.");
         exit(1);
     }
     else if (strcmp(computation, "bfs") == 0) {
-        std::vector<int> distances(max_vertex-min_vertex, -1);
+        std::vector<int> distances(max_vertex-min_vertex+1, -1);
         int level = 1;
         std::stack<int> fs;
         std::stack<int> ns;
-        if (bfs_idx >= min_vertex && bfs_idx <= max_vertex)
+        if (n_proc == 1) {
             distances[bfs_idx] = 0;
             fs.push(bfs_idx);
-        if (n_proc == 1) {
             // Serial implementation of BFS
             while (!fs.empty()) {
                 int u =0;
                 while ( !fs.empty() ) {
                     u=fs.top();
-                    //printf("U: %d\n", u);
                     for (int c = row_ptr[u]; c < row_ptr[u+1]; c++) {
                         int v = col_index[c];
                         if (distances[v] < 0) {
                             ns.push(v);
                             distances[v] = level;
                         }
-                        //printf("V: %d, d(V) = %d\n", v, distances[v]);
                     }
                     fs.pop();
                 }
@@ -186,8 +176,8 @@ int main( int argc, char **argv )
             // Parallel Breadth First Search
 
             // Buffers for Alltoallv
-            int* send_buf = new int[num_vertices];
-            int* recv_buf = new int[num_vertices];
+            int* send_buf = new int[2*num_vertices];
+            int* recv_buf = new int[2*num_vertices];
             int* send_counts = new int[n_proc];
             int* send_displs = new int[n_proc];
             int* recv_counts = new int[n_proc];
@@ -198,9 +188,14 @@ int main( int argc, char **argv )
             for (int i=0; i<n_proc; i++) {
                 send_displs[i] = i*(num_vertices/n_proc);
                 recv_displs[i] = i*(num_vertices/n_proc);
-                recv_counts[i] = (num_vertices/n_proc);
+                recv_counts[i] = 0;
             }
-
+            int own = owner(bfs_idx, n_proc, num_vertices);
+            if (own == rank) {
+                fs.push(bfs_idx);
+                distances[bfs_idx-min_vertex] = 0;
+            }
+            int not_finished = true;
             do {
                 for (int i=0; i<n_proc; i++) {
                     send_counts[i] = 0;
@@ -213,21 +208,20 @@ int main( int argc, char **argv )
                         int o = owner(v, n_proc, num_vertices);
                         if (o == rank) {
                             if (distances[v-min_vertex] < 0) {
-                                ns.push(v);
                                 distances[v-min_vertex] = level;
+                                ns.push(v);
                             }
                         }
                         else {
                             // Put the vertex in the send buffer
-                            int offset = send_displs[o];
-                            send_buf[offset+send_counts[o]] = v;
+                            int offset = send_displs[o]+send_counts[o];
+                            send_buf[offset] = v;
                             send_counts[o]++;
                         }
                     }
                 }
 
                 // All-to-all sync fs
-
                 // First exchange counts 
                 MPI_Alltoall(
                     send_counts,
@@ -239,7 +233,7 @@ int main( int argc, char **argv )
                     MPI_COMM_WORLD
                 );
 
-                // Now exchange
+                // Now exchange buffers
                 MPI_Alltoallv(
                     send_buf,
                     send_counts,
@@ -256,16 +250,14 @@ int main( int argc, char **argv )
                 for (int p=0; p<n_proc; p++) {
                     if (p != rank) {
                         for (int r=0; r<recv_counts[p]; r++) {
-                            int v = recv_buf[recv_displs[p]+r];
-                            printf("%d received %d\n", rank, v);
-                            if (distances[v-min_vertex] < 0 ) {
-                                distances[v-min_vertex] = level;
-                                ns.push(v);
+                            int u = recv_buf[recv_displs[p]+r];
+                            if (distances[u-min_vertex] < 0 ) {
+                                distances[u-min_vertex] = level;
+                                ns.push(u);
                             }
                         }
                     }
                 }
-                printf("got past adding to ns %d\n", rank);
 
                 // TODO swap stacks with references for speed 
                 while (!ns.empty()) {
@@ -273,11 +265,23 @@ int main( int argc, char **argv )
                     ns.pop();
                 }
                 level++;
-            } while (!fs.empty());
 
+                // Check if all proesses have finished
+                int is_empty = fs.empty(); 
+                MPI_Allreduce(
+                    &(is_empty),
+                    &not_finished,
+                    1,
+                    MPI_INT,
+                    MPI_LAND,
+                    MPI_COMM_WORLD
+                );
+
+            } while (!not_finished);
+            
             // Collect all distances on root process
             MPI_Gather(
-                distances.data(), 
+                distances.data(),
                 distances.size(),
                 MPI_INT,
                 all_distances,
@@ -285,8 +289,7 @@ int main( int argc, char **argv )
                 MPI_INT,
                 0,
                 MPI_COMM_WORLD
-            ); 
-
+            );
 
             if (rank == 0) {
                 FILE* f = fopen("parallel.out", "w");
@@ -313,11 +316,14 @@ int main( int argc, char **argv )
     }
     
 
-    time = read_timer( ) - time;
+    double end_time = read_timer();
+    double time = end_time - start_time;
   
     if (rank == 0) {  
         // Summarize the results
-        printf("Number of processes: %d \n", n_proc);
+        printf("Number of processes: %d took %f\n", n_proc, time);
+        printf("Start time: %f, End time, %f\n", start_time, end_time);
+
     }
   
     //  release resources
