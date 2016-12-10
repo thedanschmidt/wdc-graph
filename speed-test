@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH -A TG-SEE160002
+#SBATCH -J speedtest
+#SBATCH -o speedtest.stdout
+#SBATCH --nodes 8
+#SBATCH --ntasks-per-node=12
+#SBATCH -p compute
+#SBATCH --export=ALL
+#SBATCH -t 00:30:00
+
+# Runs aaple.com 
+#ibrun ./graph_compute -nv 5000000 -c bfs -i 2719708 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/pld-arc
+ibrun -n 192 ./graph_compute -nv 42889799 -c bfs -i 2719708 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/pld-arc
+#ibrun -n 64 ./graph_compute -nv 5000000 -c bfs -i 2719708 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/pld-arc
+#ibrun -n 256 ./graph_compute -nv 5000000 -c bfs -i 2719708 -d /oasis/projects/nsf/hmc104/schmidtd/web_data/pld-arc

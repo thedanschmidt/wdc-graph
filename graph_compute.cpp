@@ -34,9 +34,9 @@ std::vector<int> findAllConnections(int in_vertex, std::vector<int>& row_ptr, st
 }
 
 // Gives the process that owns v
-int owner(int v, int n_proc, int num_vertices) {
-    int v_per = num_vertices / n_proc;
-    return v / v_per;
+int owner(long v, long n_proc, long num_vertices) {
+    long own = (v*n_proc) / num_vertices;
+    return (int) own;
 }
 
 //
@@ -187,7 +187,9 @@ int main( int argc, char **argv )
             std::vector< std::set<int> > buff_sets;
             buff_sets.resize(n_proc);
 
-            int* all_distances = new int[(3*num_vertices)/2];
+            int* all_distances = NULL;
+            if (rank == 0)
+                all_distances = new int[num_vertices];
 
             for (int i=0; i<n_proc; i++) {
                 send_displs[i] = i*(num_vertices/n_proc)+1;
@@ -201,6 +203,7 @@ int main( int argc, char **argv )
             }
             int not_finished = true;
             do {
+
                 for (int i=0; i<n_proc; i++) {
                     send_counts[i] = 0;
                 }
@@ -258,16 +261,6 @@ int main( int argc, char **argv )
                     if (p != rank) {
                         for (int r=0; r<recv_counts[p]; r++) {
                             int offset = recv_displs[p]+r;
-
-                            // For debugging
-                            /*
-                            if (offset < 0 || offset > num_vertices) {
-                                printf("Offset OOB on process %d\n", rank);
-                                printf("from %d with counts %d\n", p, recv_counts[p]);
-                                exit(1);
-                            }
-                            */
-
                             int u = recv_buf[offset];
                             if (distances[u-min_vertex] < 0 ) {
                                 distances[u-min_vertex] = level;
@@ -296,6 +289,7 @@ int main( int argc, char **argv )
                 );
 
             } while (!not_finished);
+            printf("%d finished\n", rank);
             
             // Collect all distances on root process
             MPI_Gather(
@@ -303,7 +297,7 @@ int main( int argc, char **argv )
                 distances.size(),
                 MPI_INT,
                 all_distances,
-                distances.size(),
+                distances.size()+1,
                 MPI_INT,
                 0,
                 MPI_COMM_WORLD
